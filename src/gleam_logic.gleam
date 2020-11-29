@@ -3,17 +3,12 @@ import gleam/list
 import gleam/map
 import gleam/option
 import gleam/string
+import gleam_logic/stream
 
 pub type Term {
   Symbol(String)
   Variable(VariableIndex)
   Pair(Term, Term)
-}
-
-pub type Stream(a) {
-  Empty
-  Mature(a, Stream(a))
-  Immature(fn() -> Stream(a))
 }
 
 pub type VariableIndex =
@@ -27,22 +22,22 @@ pub type State {
 }
 
 pub type Goal =
-  fn(State) -> Stream(State)
+  fn(State) -> stream.Stream(State)
 
 pub fn empty_state() -> State {
   State(map.new(), 0)
 }
 
-pub fn call_empty_state(g: Goal) -> Stream(State) {
+pub fn call_empty_state(g: Goal) -> stream.Stream(State) {
   g(empty_state())
 }
 
 pub fn run(n: Int, g: Goal) {
-  mk_reify(take(n, call_empty_state(g)))
+  mk_reify(stream.take(n, call_empty_state(g)))
 }
 
 pub fn run_all(g: Goal) {
-  mk_reify(take_all(call_empty_state(g)))
+  mk_reify(stream.take_all(call_empty_state(g)))
 }
 
 pub fn walk(u: Term, s: Substitution) -> Term {
@@ -102,58 +97,8 @@ pub fn unify(u: Term, v: Term, s: Substitution) -> option.Option(Substitution) {
   }
 }
 
-pub fn pull(s: Stream(a)) -> Stream(a) {
-  case s {
-    Empty -> Empty
-    Mature(x, xs) -> Mature(x, xs)
-    Immature(f) -> pull(f())
-  }
-}
-
-pub fn take_all(s: Stream(a)) -> List(a) {
-  case pull(s) {
-    Empty -> []
-    Mature(x, xs) -> [x, ..take_all(xs)]
-  }
-}
-
-pub fn take(n: Int, s: Stream(a)) -> List(a) {
-  case n {
-    0 -> []
-    n ->
-      case pull(s) {
-        Empty -> []
-        Mature(x, xs) -> [x, ..take(n - 1, xs)]
-      }
-  }
-}
-
-pub fn mzero() -> Stream(a) {
-  Empty
-}
-
-pub fn unit(x: a) -> Stream(a) {
-  Mature(x, Empty)
-}
-
-pub fn mplus(s1: Stream(a), s2: Stream(a)) {
-  case s1 {
-    Empty -> s2
-    Mature(x, xs) -> Mature(x, mplus(xs, s2))
-    Immature(f) -> Immature(fn() { mplus(s2, f()) })
-  }
-}
-
-pub fn bind(s1: Stream(a), g: fn(a) -> Stream(a)) -> Stream(a) {
-  case s1 {
-    Empty -> mzero()
-    Mature(x, xs) -> mplus(g(x), bind(xs, g))
-    Immature(f) -> Immature(fn() { bind(f(), g) })
-  }
-}
-
 pub fn zzz(g: Goal) -> Goal {
-  fn(a) { Immature(fn() { g(a) }) }
+  fn(a) { stream.Immature(fn() { g(a) }) }
 }
 
 pub fn conj_all(gs: List(Goal)) -> Goal {
@@ -179,8 +124,8 @@ pub fn conde(gs: List(List(Goal))) -> Goal {
 pub fn equal(u: Term, v: Term) -> Goal {
   fn(state: State) {
     case unify(u, v, state.substitution) {
-      option.None -> mzero()
-      option.Some(s) -> unit(State(..state, substitution: s))
+      option.None -> stream.mzero()
+      option.Some(s) -> stream.unit(State(..state, substitution: s))
     }
   }
 }
@@ -198,7 +143,7 @@ pub fn disj(g1: Goal, g2: Goal) -> Goal {
     let s1 = g1(state)
     let s2 = g2(state)
 
-    mplus(s1, s2)
+    stream.mplus(s1, s2)
   }
 }
 
@@ -206,7 +151,7 @@ pub fn conj(g1: Goal, g2: Goal) -> Goal {
   fn(state) {
     let s = g1(state)
 
-    bind(s, g2)
+    stream.bind(s, g2)
   }
 }
 
