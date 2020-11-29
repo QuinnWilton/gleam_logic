@@ -1,5 +1,8 @@
+import gleam/int
+import gleam/list
 import gleam/map
 import gleam/option
+import gleam/string
 
 pub type Term {
   Symbol(String)
@@ -30,6 +33,18 @@ pub fn empty_state() -> State {
   State(map.new(), 0)
 }
 
+pub fn call_empty_state(g: Goal) -> Stream(State) {
+  g(empty_state())
+}
+
+pub fn run(n: Int, g: Goal) {
+  mk_reify(take(n, call_empty_state(g)))
+}
+
+pub fn run_all(g: Goal) {
+  mk_reify(take_all(call_empty_state(g)))
+}
+
 pub fn walk(u: Term, s: Substitution) -> Term {
   case u {
     Variable(index) ->
@@ -38,6 +53,14 @@ pub fn walk(u: Term, s: Substitution) -> Term {
         Ok(v) -> walk(v, s)
       }
     _ -> u
+  }
+}
+
+pub fn walk_all(u: Term, s: Substitution) -> Term {
+  case walk(u, s) {
+    Variable(_) -> u
+    Pair(u1, u2) -> Pair(walk_all(u1, s), walk_all(u2, s))
+    u -> u
   }
 }
 
@@ -83,13 +106,13 @@ pub fn take_all(s: Stream(a)) -> List(a) {
   }
 }
 
-pub fn take_n(n: Int, s: Stream(a)) -> List(a) {
+pub fn take(n: Int, s: Stream(a)) -> List(a) {
   case n {
     0 -> []
     n ->
       case pull(s) {
         Empty -> []
-        Mature(x, xs) -> [x, ..take_n(n - 1, xs)]
+        Mature(x, xs) -> [x, ..take(n - 1, xs)]
       }
   }
 }
@@ -120,6 +143,26 @@ pub fn bind(s1: Stream(a), g: fn(a) -> Stream(a)) -> Stream(a) {
 
 pub fn zzz(g: Goal) -> Goal {
   fn(a) { Immature(fn() { g(a) }) }
+}
+
+pub fn conj_all(gs: List(Goal)) -> Goal {
+  case gs {
+    [g] -> zzz(g)
+    [g, ..gs] -> conj(zzz(g), conj_all(gs))
+  }
+}
+
+pub fn disj_all(gs: List(Goal)) -> Goal {
+  case gs {
+    [g] -> zzz(g)
+    [g, ..gs] -> disj(zzz(g), disj_all(gs))
+  }
+}
+
+pub fn conde(gs: List(List(Goal))) -> Goal {
+  gs
+  |> list.map(conj_all)
+  |> disj_all()
 }
 
 pub fn equal(u: Term, v: Term) -> Goal {
@@ -154,4 +197,29 @@ pub fn conj(g1: Goal, g2: Goal) -> Goal {
 
     bind(s, g2)
   }
+}
+
+pub fn mk_reify(states: List(State)) {
+  list.map(states, reify_state_first_variable)
+}
+
+pub fn reify_state_first_variable(state: State) {
+  let v = walk_all(Variable(0), state.substitution)
+
+  walk_all(v, reify_substitution(v, map.new()))
+}
+
+pub fn reify_substitution(u: Term, s: Substitution) {
+  case walk(u, s) {
+    Variable(index) -> {
+      let n = reify_name(map.size(s))
+      extend_substitution(index, n, s)
+    }
+    Pair(u1, u2) -> reify_substitution(u2, reify_substitution(u1, s))
+    _ -> s
+  }
+}
+
+pub fn reify_name(n: Int) {
+  Symbol(string.append("_.", int.to_string(n)))
 }

@@ -10,9 +10,43 @@ fn fives(x) {
 }
 
 pub fn fives_test() {
-  let stream = gleam_logic.call_fresh(fives)(gleam_logic.empty_state())
-  let [state] = gleam_logic.take_n(1, stream)
-  let result = map.get(state.substitution, 0)
+  let result = gleam_logic.run(1, gleam_logic.call_fresh(fives))
 
-  should.equal(result, Ok(gleam_logic.Symbol("5")))
+  should.equal(result, [gleam_logic.Symbol("5")])
+}
+
+pub fn disj_all_test() {
+  let result =
+    gleam_logic.run_all(gleam_logic.call_fresh(fn(x) {
+      gleam_logic.disj_all([
+        gleam_logic.equal(x, gleam_logic.Symbol("2")),
+        gleam_logic.equal(x, gleam_logic.Symbol("1")),
+        gleam_logic.equal(x, gleam_logic.Symbol("8")),
+      ])
+    }))
+
+  should.equal(
+    result,
+    [gleam_logic.Symbol("2"), gleam_logic.Symbol("1"), gleam_logic.Symbol("8")],
+  )
+}
+
+pub fn conde_test() {
+  let result =
+    gleam_logic.run_all(gleam_logic.call_fresh(fn(x) {
+      gleam_logic.call_fresh(fn(y) {
+        gleam_logic.conde([
+          [
+            gleam_logic.equal(x, gleam_logic.Symbol("5")),
+            gleam_logic.equal(y, gleam_logic.Symbol("3")),
+          ],
+          [
+            gleam_logic.equal(x, gleam_logic.Symbol("8")),
+            gleam_logic.equal(y, gleam_logic.Symbol("2")),
+          ],
+        ])
+      })
+    }))
+
+  should.equal(result, [gleam_logic.Symbol("5"), gleam_logic.Symbol("8")])
 }
