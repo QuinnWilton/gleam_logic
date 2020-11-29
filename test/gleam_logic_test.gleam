@@ -50,3 +50,12 @@ pub fn conde_test() {
 
   should.equal(result, [gleam_logic.Symbol("5"), gleam_logic.Symbol("8")])
 }
+
+pub fn reifier_test() {
+  let result =
+    gleam_logic.run_all(gleam_logic.call_fresh(fn(x) {
+      gleam_logic.call_fresh(fn(y) { gleam_logic.equal(x, y) })
+    }))
+
+  should.equal(result, [gleam_logic.Symbol("_.0")])
+}
