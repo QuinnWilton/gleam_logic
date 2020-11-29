@@ -68,8 +68,19 @@ pub fn extend_substitution(
   index: VariableIndex,
   u: Term,
   s: Substitution,
-) -> Substitution {
-  map.insert(s, index, u)
+) -> option.Option(Substitution) {
+  case occurs_check(index, u, s) {
+    True -> option.None
+    False -> option.Some(map.insert(s, index, u))
+  }
+}
+
+pub fn occurs_check(index: VariableIndex, v: Term, s: Substitution) -> Bool {
+  case walk(v, s) {
+    Variable(v_index) -> index == v_index
+    Pair(v1, v2) -> occurs_check(index, v1, s) || occurs_check(index, v2, s)
+    _ -> False
+  }
 }
 
 pub fn unify(u: Term, v: Term, s: Substitution) -> option.Option(Substitution) {
@@ -79,8 +90,8 @@ pub fn unify(u: Term, v: Term, s: Substitution) -> option.Option(Substitution) {
   case tuple(u, v) {
     tuple(Variable(u_index), Variable(v_index)) if u_index == v_index ->
       option.Some(s)
-    tuple(Variable(index), _) -> option.Some(extend_substitution(index, v, s))
-    tuple(_, Variable(index)) -> option.Some(extend_substitution(index, u, s))
+    tuple(Variable(index), _) -> extend_substitution(index, v, s)
+    tuple(_, Variable(index)) -> extend_substitution(index, u, s)
     tuple(Pair(u1, u2), Pair(v1, v2)) ->
       case unify(u1, v1, s) {
         option.None -> option.None
@@ -213,7 +224,10 @@ pub fn reify_substitution(u: Term, s: Substitution) {
   case walk(u, s) {
     Variable(index) -> {
       let n = reify_name(map.size(s))
-      extend_substitution(index, n, s)
+      case extend_substitution(index, n, s) {
+        option.None -> s
+        option.Some(s) -> s
+      }
     }
     Pair(u1, u2) -> reify_substitution(u2, reify_substitution(u1, s))
     _ -> s
